@@ -16,39 +16,76 @@
 #and we can publish the script with some derived graphs in a future issue.  
 # 
 # PreRequisites:
-# gem install twitter
+# gem install twitter     - help at http://twitter.rubyforge.org/rdoc/
+# gem install sparklines  - help at http://sparklines.rubyforge.org/
 
 require "twitter"
+require 'rubygems'
+require 'sparklines'
 
 # constants and parameters
 twitter_username = ""  ## get this via console input
 twitter_password = ""  ## get this via console input
-search_keyword = "((ruby OR rails) (magazine OR mag)) OR railsmagazine"  ## get this via console input
-total_found = 0
 
 # twitter search method
-def twitter_search(skeyword)
-  recs_found = 0
+def twitter_search(skeyword, rec_per_page)
+    recs_found = 0
+    
+    Twitter::Search.new(skeyword).per_page(rec_per_page).each do |r|
+      #puts r.inspect
+      #puts "@" + r.from_user + ": " + r.text
+      #puts "at " + r.created_at
+      #puts "......................................................................"
+      #puts
+      recs_found = recs_found + 1
+    end
+    recs_found
+end
+
+def generate_graph(pOutputfile, graphType, arrData)
+  # plot the graph and write out to a file   
+  Sparklines.plot_to_file(pOutputfile, arrData,
+                          :type => graphType, 
+                          :height => 50)  
+end
+
+def chart_twits(no_of_days, pGraphType)
+  search_keyword = "((ruby OR rails) (magazine OR mag)) OR railsmagazine"
+  sinceDate = (DateTime::now() - no_of_days)
+  records_per_page = 100
+  total_found = 0
+  pGraphfile = "c:\\users\\rupak\\pictures\\twitgraph-" + pGraphType + ".jpg"
   
-  Twitter::Search.new(skeyword).each do |r|
-    #puts r.inspect
-    #puts "* " + r.text + " | by [" + r.from_user + "] at [" + r.created_at + "]"
-    puts "@" + r.from_user + ": " + r.text
-    #puts "about " + (DateTime::now() - DateTime.new(r.created_at.to_date)).to_s() + " ago from " + r.source
-    puts "at " + r.created_at
-    puts "......................................................................"
-    puts
-    recs_found = recs_found + 1
-  end
-  recs_found
+  week_recs = [0,0,0,0,0,0,0]  # init an array to 7 items to represent 7 days' data
+  
+  no_of_days.times { |i|
+    total_found = 0
+    # move the date range 1 day ahead to calculate the no. of hits for that day
+    untilDate = sinceDate
+    
+    dateCriteria = " since:" + sinceDate.strftime('%Y-%m-%d').to_s + " until:" + untilDate.strftime('%Y-%m-%d').to_s
+    skeyword_withdate = search_keyword + dateCriteria 
+    puts "~~~~~~~ Keyword: " + skeyword_withdate + " ~~~~~~~~"
+    
+    # do the search and get the hits
+    total_found = twitter_search(skeyword_withdate, records_per_page)
+    week_recs[i] = total_found
+    puts "~~~~~~~ Total hits: " + total_found.to_s + ", records per page: " + records_per_page.to_s + " ~~~~~~~~"
+    
+    # increment the day
+    sinceDate = sinceDate + 1
+  
+  }
+  puts
+  puts "Generating a " + pGraphType + " chart for past " + no_of_days.to_s + " day till today..."
+  generate_graph(pGraphfile, pGraphType, week_recs)
+  puts "Graph image saved at " + pGraphfile
 end
 
 #############################################################################################################
 # main program
-puts "~~~~~~~~~~~~~~~~~~~~~~~~~ Keyword: " + search_keyword + " ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
-puts
-total_found = twitter_search(search_keyword)
-puts
-puts "~~~~~~~~~~~~~~~~~~~~~~~~~ Total tweets: " + total_found.to_s + " ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
-
-
+chart_types = ['area', 'discrete', 'pie', 'smooth', 'bar', 'whisker']
+chart_types.each { |ct|
+  # generate chart for past 30 days till today
+  chart_twits(30, ct)
+}
